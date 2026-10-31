@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "harness-demo-java-app.fullname" . }}-smoke-test"
+  labels:
+    {{- include "harness-demo-java-app.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: wget
+      image: busybox:1.37.0
+      command:
+        - wget
+      args:
+        - --quiet
+        - --output-document=-
+        - "http://{{ include "harness-demo-java-app.fullname" . }}:{{ .Values.service.port }}/actuator/health/readiness"
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop:
+            - ALL

@@ -1,0 +1,28 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        APP_VERSION: local
+    image: harness-demo-java-app:local
+    environment:
+      APP_ENVIRONMENT: local
+      RELEASE_COLOR: blue
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --quiet
+        - --spider
+        - http://localhost:8080/actuator/health/readiness
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 20s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    security_opt:
+      - no-new-privileges:true

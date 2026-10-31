@@ -1,0 +1,67 @@
+{
+  "family": "harness-demo-java-app",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "<+serviceVariables.executionRoleArn>",
+  "taskRoleArn": "<+serviceVariables.taskRoleArn>",
+  "containerDefinitions": [
+    {
+      "name": "harness-demo-java-app",
+      "image": "<+artifact.image>",
+      "essential": true,
+      "readonlyRootFilesystem": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp",
+          "name": "http"
+        }
+      ],
+      "environment": [
+        {
+          "name": "APP_ENVIRONMENT",
+          "value": "<+env.identifier>"
+        },
+        {
+          "name": "APP_VERSION",
+          "value": "<+artifact.tag>"
+        },
+        {
+          "name": "RELEASE_COLOR",
+          "value": "<+serviceVariables.releaseColor>"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --quiet --spider http://localhost:8080/actuator/health/readiness || exit 1"
+        ],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
+      "linuxParameters": {
+        "initProcessEnabled": true
+      },
+      "mountPoints": [
+        {
+          "sourceVolume": "tmp",
+          "containerPath": "/tmp",
+          "readOnly": false
+        }
+      ],
+      "volumesFrom": []
+    }
+  ],
+  "volumes": [
+    {
+      "name": "tmp"
+    }
+  ]
+}

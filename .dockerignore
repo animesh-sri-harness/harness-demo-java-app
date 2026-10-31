@@ -1,0 +1,7 @@
+*
+!pom.xml
+!src/
+!src/**
+!LICENSE
+!target/
+!target/app.jar

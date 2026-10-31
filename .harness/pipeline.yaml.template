@@ -1,0 +1,252 @@
+pipeline:
+  identifier: harness_demo_java_cicd
+  name: Harness Demo Java CI CD STO
+  orgIdentifier: ${HARNESS_ORG_ID}
+  projectIdentifier: ${HARNESS_PROJECT_ID}
+  tags:
+    application: java
+    deployment: progressive
+  properties:
+    ci:
+      codebase:
+        connectorRef: <+input>
+        repoName: <+input>
+        build:
+          type: branch
+          spec:
+            branch: <+input>
+  variables:
+    - name: registryConnector
+      type: String
+      description: Harness Docker Registry connector identifier
+      value: <+input>
+    - name: imageRepository
+      type: String
+      description: Fully qualified image repository without a tag
+      value: <+input>
+    - name: kubernetesService
+      type: String
+      description: Harness Kubernetes service identifier
+      value: <+input>
+    - name: environment
+      type: String
+      description: Harness environment identifier
+      value: <+input>
+    - name: infrastructure
+      type: String
+      description: Harness infrastructure definition identifier
+      value: <+input>
+    - name: deploymentStrategy
+      type: String
+      description: Select canary or bluegreen
+      default: canary
+      value: <+input>
+  stages:
+    - stage:
+        identifier: build_test_and_scan
+        name: Build Test and Scan
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  identifier: maven_verify
+                  name: Maven Verify
+                  type: Run
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9.11-eclipse-temurin-21-alpine
+                    shell: Sh
+                    command: mvn --batch-mode --no-transfer-progress clean verify
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths:
+                          - target/surefire-reports/*.xml
+              - parallel:
+                  - step:
+                      identifier: harness_code_scan
+                      name: Harness Code SAST and SCA
+                      type: HarnessSAST
+                      spec:
+                        mode: orchestration
+                        config: sast_sca
+                        target:
+                          type: repository
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+                  - step:
+                      identifier: secrets_scan
+                      name: Gitleaks Secrets Scan
+                      type: Gitleaks
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: repository
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+              - step:
+                  identifier: build_and_push
+                  name: Build and Push Image
+                  type: BuildAndPushDockerRegistry
+                  spec:
+                    connectorRef: <+pipeline.variables.registryConnector>
+                    repo: <+pipeline.variables.imageRepository>
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - <+codebase.commitSha>
+                    dockerfile: Dockerfile.runtime
+                    context: .
+                    buildArgs:
+                      APP_VERSION: <+pipeline.sequenceId>
+                      VCS_REF: <+codebase.commitSha>
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsFailure
+    - stage:
+        identifier: kubernetes_canary
+        name: Kubernetes Canary
+        type: Deployment
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.deploymentStrategy> == "canary"
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: <+pipeline.variables.kubernetesService>
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: <+input>
+                      sources: <+input>
+          environment:
+            environmentRef: <+pipeline.variables.environment>
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: <+pipeline.variables.infrastructure>
+          execution:
+            steps:
+              - step:
+                  identifier: deploy_canary
+                  name: Deploy Canary
+                  type: K8sCanaryDeploy
+                  timeout: 10m
+                  spec:
+                    instanceSelection:
+                      type: Count
+                      spec:
+                        count: 1
+              - step:
+                  identifier: approve_canary
+                  name: Approve Canary Promotion
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: Verify the canary release metadata and approve promotion.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: true
+                      userGroups: <+input>
+              - step:
+                  identifier: promote_canary
+                  name: Promote Canary
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+            rollbackSteps:
+              - step:
+                  identifier: delete_canary
+                  name: Delete Canary
+                  type: K8sCanaryDelete
+                  timeout: 10m
+                  spec: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        identifier: kubernetes_blue_green
+        name: Kubernetes Blue Green
+        type: Deployment
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.deploymentStrategy> == "bluegreen"
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: <+pipeline.variables.kubernetesService>
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: <+input>
+                      sources: <+input>
+          environment:
+            environmentRef: <+pipeline.variables.environment>
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: <+pipeline.variables.infrastructure>
+          execution:
+            steps:
+              - step:
+                  identifier: deploy_green
+                  name: Deploy Green
+                  type: K8sBlueGreenDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+              - step:
+                  identifier: approve_swap
+                  name: Approve Production Swap
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: Verify the staging service and approve the traffic swap.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      minimumCount: 1
+                      disallowPipelineExecutor: true
+                      userGroups: <+input>
+              - step:
+                  identifier: swap_services
+                  name: Swap Primary and Stage Services
+                  type: K8sBGSwapServices
+                  timeout: 10m
+                  spec: {}
+            rollbackSteps:
+              - step:
+                  identifier: swap_services_back
+                  name: Swap Services Back
+                  type: K8sBGSwapServices
+                  timeout: 10m
+                  spec: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

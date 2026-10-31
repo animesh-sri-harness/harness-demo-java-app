@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Harness Demo Java App</title>
+    <style>
+      :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #101827; }
+      main { width: min(38rem, calc(100% - 3rem)); padding: 2.5rem; border-radius: 1rem;
+        background: #19243a; color: #f7f9fc; box-shadow: 0 1rem 3rem #0006; }
+      h1 { margin-top: 0; color: #66e3c4; }
+      dl { display: grid; grid-template-columns: max-content 1fr; gap: .65rem 1.2rem; }
+      dt { color: #a9b8d0; } dd { margin: 0; font-family: ui-monospace, monospace; }
+      a { color: #66e3c4; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Harness Demo Java App</h1>
+      <p>A deployment-ready Spring Boot workload for CI, CD, STO, and progressive delivery.</p>
+      <dl id="release"><dt>Status</dt><dd>Loading release metadata…</dd></dl>
+      <p><a href="/actuator/health">Health</a> ·
+        <a href="/actuator/prometheus">Prometheus metrics</a> ·
+        <a href="/api/v1/greetings">Greeting API</a></p>
+    </main>
+    <script>
+      fetch("/api/v1/info")
+        .then((response) => response.json())
+        .then((release) => {
+          const fields = ["application", "version", "color", "environment", "hostname", "timestamp"];
+          document.querySelector("#release").innerHTML = fields
+            .map((field) => `<dt>${field}</dt><dd>${release[field]}</dd>`).join("");
+          document.querySelector("main").dataset.releaseColor = release.color;
+        })
+        .catch(() => {
+          document.querySelector("#release").innerHTML =
+            "<dt>Status</dt><dd>Metadata unavailable</dd>";
+        });
+    </script>
+  </body>
+</html>

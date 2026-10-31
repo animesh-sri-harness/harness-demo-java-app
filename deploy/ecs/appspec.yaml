@@ -1,0 +1,17 @@
+version: 0.0
+Resources:
+  - TargetService:
+      Type: AWS::ECS::Service
+      Properties:
+        TaskDefinition: <TASK_DEFINITION>
+        LoadBalancerInfo:
+          ContainerName: harness-demo-java-app
+          ContainerPort: 8080
+        PlatformVersion: LATEST
+        NetworkConfiguration:
+          AwsvpcConfiguration:
+            Subnets:
+              - <SUBNET_ID>
+            SecurityGroups:
+              - <SECURITY_GROUP_ID>
+            AssignPublicIp: DISABLED

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: harness-demo-java-app
+  labels:
+    app.kubernetes.io/name: harness-demo-java-app
+  annotations:
+    harness.io/primary-service: "true"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: harness-demo-java-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
